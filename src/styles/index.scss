@@ -1,0 +1,27 @@
+// 重置样式
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+// Element Plus 暗色菜单样式
+.el-menu {
+  border-right: none !important;
+  
+  .el-menu-item {
+    &.is-active {
+      background-color: #1890ff !important;
+    }
+    
+    &:hover {
+      background-color: #1890ff !important;
+      opacity: 0.8;
+    }
+  }
+} 

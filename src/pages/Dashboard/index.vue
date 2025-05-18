@@ -3,7 +3,7 @@
     <!-- 统计卡片 -->
     <el-row :gutter="20" class="statistics">
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" v-loading="loading">
           <template #header>
             <div class="card-header">
               <span>本月收入</span>
@@ -11,12 +11,12 @@
             </div>
           </template>
           <div class="card-value">
-            ¥ {{ monthlyIncome.toLocaleString() }}
+            ¥ {{ stats.monthlyIncome.toLocaleString() }}
           </div>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" v-loading="loading">
           <template #header>
             <div class="card-header">
               <span>工作时长</span>
@@ -24,12 +24,12 @@
             </div>
           </template>
           <div class="card-value">
-            {{ workHours }} 小时
+            {{ stats.workHours }} 小时
           </div>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" v-loading="loading">
           <template #header>
             <div class="card-header">
               <span>完成工单</span>
@@ -37,12 +37,12 @@
             </div>
           </template>
           <div class="card-value">
-            {{ completedJobs }} 个
+            {{ stats.completedJobs }} 个
           </div>
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" v-loading="loading">
           <template #header>
             <div class="card-header">
               <span>好评率</span>
@@ -50,7 +50,7 @@
             </div>
           </template>
           <div class="card-value">
-            {{ (rating * 100).toFixed(1) }}%
+            {{ (stats.rating * 100).toFixed(1) }}%
           </div>
         </el-card>
       </el-col>
@@ -86,7 +86,7 @@
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover">
+        <el-card shadow="hover" @click="handleContactService">
           <div class="action-card">
             <el-icon :size="32" color="#eb2f96"><Service /></el-icon>
             <h3>客服中心</h3>
@@ -105,7 +105,7 @@
           <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
-      <el-table :data="recentJobs" style="width: 100%">
+      <el-table :data="recentJobs" style="width: 100%" v-loading="jobsLoading">
         <el-table-column prop="jobTitle" label="岗位" />
         <el-table-column prop="company" label="公司" />
         <el-table-column prop="date" label="日期" width="180" />
@@ -127,7 +127,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Search,
   Calendar,
@@ -135,43 +136,107 @@ import {
   Service,
   ArrowRight
 } from '@element-plus/icons-vue'
+import { getDashboardStats, getRecentJobs } from '@/api/dashboard'
+import type { DashboardStats, RecentJob } from '@/api/dashboard'
 
-// 模拟数据
-const monthlyIncome = ref(8500)
-const workHours = ref(120)
-const completedJobs = ref(15)
-const rating = ref(0.985)
+// 加载状态
+const loading = ref(false)
+const jobsLoading = ref(false)
 
-const recentJobs = ref([
-  {
-    jobTitle: '仓库理货员',
-    company: '京东物流',
-    date: '2023-12-15',
-    salary: 350,
-    status: 'completed'
-  },
-  {
-    jobTitle: '快递分拣员',
-    company: '顺丰速运',
-    date: '2023-12-14',
-    salary: 280,
-    status: 'completed'
-  },
-  {
-    jobTitle: '商场导购',
-    company: '优衣库',
-    date: '2023-12-13',
-    salary: 400,
-    status: 'processing'
-  },
-  {
-    jobTitle: '餐厅服务员',
-    company: '海底捞',
-    date: '2023-12-12',
-    salary: 320,
-    status: 'cancelled'
+// 统计数据
+const stats = reactive<DashboardStats>({
+  monthlyIncome: 0,
+  workHours: 0,
+  completedJobs: 0,
+  rating: 0
+})
+
+// 最近工作数据
+const recentJobs = ref<RecentJob[]>([])
+
+// 获取统计数据
+const fetchStats = async () => {
+  loading.value = true
+  try {
+    // 如果后端API尚未实现，使用模拟数据
+    if (import.meta.env.DEV) {
+      // 模拟API延迟
+      await new Promise(resolve => setTimeout(resolve, 500))
+      stats.monthlyIncome = 8500
+      stats.workHours = 120
+      stats.completedJobs = 15
+      stats.rating = 0.985
+    } else {
+      const res = await getDashboardStats()
+      Object.assign(stats, res.data)
+    }
+  } catch (error) {
+    console.error('获取统计数据失败:', error)
+    ElMessage.error('获取统计数据失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-])
+}
+
+// 获取最近工作
+const fetchRecentJobs = async () => {
+  jobsLoading.value = true
+  try {
+    // 如果后端API尚未实现，使用模拟数据
+    if (import.meta.env.DEV) {
+      // 模拟API延迟
+      await new Promise(resolve => setTimeout(resolve, 500))
+      recentJobs.value = [
+        {
+          id: 1,
+          jobTitle: '仓库理货员',
+          company: '京东物流',
+          date: '2023-12-15',
+          salary: 350,
+          status: 'completed'
+        },
+        {
+          id: 2,
+          jobTitle: '快递分拣员',
+          company: '顺丰速运',
+          date: '2023-12-14',
+          salary: 280,
+          status: 'completed'
+        },
+        {
+          id: 3,
+          jobTitle: '商场导购',
+          company: '优衣库',
+          date: '2023-12-13',
+          salary: 400,
+          status: 'processing'
+        },
+        {
+          id: 4,
+          jobTitle: '餐厅服务员',
+          company: '海底捞',
+          date: '2023-12-12',
+          salary: 320,
+          status: 'cancelled'
+        }
+      ]
+    } else {
+      const res = await getRecentJobs()
+      recentJobs.value = res.data
+    }
+  } catch (error) {
+    console.error('获取最近工作失败:', error)
+    ElMessage.error('获取最近工作失败，请稍后重试')
+  } finally {
+    jobsLoading.value = false
+  }
+}
+
+// 联系客服
+const handleContactService = () => {
+  ElMessage.success('正在连接客服，请稍候...')
+  // 这里可以实现在线客服功能，如打开聊天窗口等
+}
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
@@ -190,6 +255,12 @@ const getStatusText = (status: string) => {
   }
   return map[status] || '未知'
 }
+
+// 页面加载时获取数据
+onMounted(() => {
+  fetchStats()
+  fetchRecentJobs()
+})
 </script>
 
 <style lang="scss" scoped>

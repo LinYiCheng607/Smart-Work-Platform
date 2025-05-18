@@ -122,11 +122,12 @@ const initUserInfo = () => {
   const token = localStorage.getItem('access_token')
   const userName = localStorage.getItem('user_name')
   const username = localStorage.getItem('username')
+  const userId = localStorage.getItem('user_id')
   
   if (token && userName && !userStore.userInfo) {
     // 如果有token和用户名但没有用户信息，则创建基本用户信息
     userStore.setUserInfo({
-      id: 0,
+      id: userId ? parseInt(userId) : 0,
       username: username || userName,
       name: userName,
       phone: '',
@@ -150,6 +151,7 @@ const handleLogout = () => {
   localStorage.removeItem('refresh_token')
   localStorage.removeItem('user_name')
   localStorage.removeItem('username')
+  localStorage.removeItem('user_id')
   router.push('/login')
 }
 </script>

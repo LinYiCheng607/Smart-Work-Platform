@@ -60,8 +60,9 @@
     </el-card>
 
     <!-- 岗位列表 -->
-    <div class="job-list">
-      <el-row :gutter="20">
+    <div v-loading="loading" class="job-list">
+      <el-empty v-if="!loading && jobList.length === 0" description="暂无岗位数据" />
+      <el-row v-else :gutter="20">
         <el-col :span="8" v-for="job in jobList" :key="job.id">
           <el-card class="job-card" shadow="hover">
             <div class="job-header">
@@ -103,11 +104,13 @@
               <div class="job-actions">
                 <el-button type="primary" size="small" @click="handleApply(job)">立即申请</el-button>
                 <el-button 
-                  type="default" 
+                  :type="job.isFavorite ? 'success' : 'default'" 
                   size="small" 
                   @click="toggleFavorite(job)"
-                  :icon="job.isFavorite ? 'Star' : 'StarFilled'"
                 >
+                  <el-icon>
+                    <component :is="job.isFavorite ? 'StarFilled' : 'Star'" />
+                  </el-icon>
                   {{ job.isFavorite ? '已关注' : '关注' }}
                 </el-button>
               </div>
@@ -115,42 +118,133 @@
           </el-card>
         </el-col>
       </el-row>
+      
+      <!-- 分页 -->
+      <div class="pagination" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="searchForm.page"
+          :page-size="searchForm.pageSize"
+          :total="total"
+          layout="prev, pager, next"
+          @current-change="fetchJobs"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { Location, Search, Star, StarFilled, Money } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-
-interface Job {
-  id: number
-  title: string
-  company: string
-  logo: string
-  salary: string
-  location: string
-  tags: string[]
-  description: string
-  isUrgent: boolean
-  distance: string
-  workTimeBonus: string
-  isFlashPay: boolean
-  isFavorite?: boolean
-}
+import { ElMessage, ElLoading } from 'element-plus'
+import { getJobList, favoriteJob, unfavoriteJob, applyJob } from '@/api/jobs'
+import type { Job, JobQueryParams } from '@/api/jobs'
 
 // 搜索表单
-const searchForm = ref({
+const searchForm = reactive<JobQueryParams>({
   keyword: '',
   jobCategory: 'all',
   location: '',
   type: '',
-  salary: ''
+  salary: '',
+  page: 1,
+  pageSize: 10
 })
 
 // 岗位列表数据
-const jobList = ref<Job[]>([
+const jobList = ref<Job[]>([])
+const loading = ref(false)
+const total = ref(0)
+
+// 获取岗位列表
+const fetchJobs = async () => {
+  loading.value = true
+  try {
+    // 如果后端API尚未实现，使用模拟数据
+    if (import.meta.env.DEV) {
+      // 模拟API延迟
+      await new Promise(resolve => setTimeout(resolve, 500))
+      jobList.value = mockJobList
+      total.value = mockJobList.length
+    } else {
+      const res = await getJobList(searchForm)
+      jobList.value = res.data.list
+      total.value = res.data.total
+    }
+  } catch (error) {
+    console.error('获取岗位列表失败:', error)
+    ElMessage.error('获取岗位列表失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 搜索岗位
+const handleSearch = () => {
+  searchForm.page = 1
+  fetchJobs()
+}
+
+// 重置搜索条件
+const resetSearch = () => {
+  searchForm.keyword = ''
+  searchForm.jobCategory = 'all'
+  searchForm.location = ''
+  searchForm.type = ''
+  searchForm.salary = ''
+  searchForm.page = 1
+  fetchJobs()
+}
+
+// 收藏/取消收藏岗位
+const toggleFavorite = async (job: Job) => {
+  try {
+    if (job.isFavorite) {
+      await unfavoriteJob(job.id)
+      ElMessage.success('已取消收藏')
+    } else {
+      await favoriteJob(job.id)
+      ElMessage.success('已收藏')
+    }
+    job.isFavorite = !job.isFavorite
+  } catch (error) {
+    console.error('操作失败:', error)
+    ElMessage.error('操作失败，请稍后重试')
+  }
+}
+
+// 申请岗位
+const handleApply = async (job: Job) => {
+  try {
+    await applyJob(job.id, {})
+    ElMessage.success('申请成功')
+  } catch (error) {
+    console.error('申请失败:', error)
+    ElMessage.error('申请失败，请稍后重试')
+  }
+}
+
+// 获取标签类型
+const getTagType = (tag: string) => {
+  const tagMap: Record<string, string> = {
+    '全职': 'success',
+    '兼职': 'primary',
+    '临时工': 'warning',
+    '轻松不累': 'info',
+    '学历不限': '',
+    '1年以下': '',
+    '1-3年': '',
+    '高中': '',
+    '大专': '',
+    '经验不限': '',
+    '高中以上': '',
+    '2-3年': ''
+  }
+  return tagMap[tag] || ''
+}
+
+// 模拟数据
+const mockJobList = [
   {
     id: 1,
     title: '仓库理货员',
@@ -240,102 +334,13 @@ const jobList = ref<Job[]>([
     workTimeBonus: '满40工时奖励50元',
     isFlashPay: false,
     isFavorite: false
-  },
-  {
-    id: 7,
-    title: '物流调度员',
-    company: '京东物流',
-    logo: '/company-logos/jd.svg',
-    salary: '220-280',
-    location: '厦门市集美区',
-    tags: ['全职', '3-5年', '本科'],
-    description: '负责物流路线规划、车辆调度等工作',
-    isUrgent: true,
-    distance: '距地铁站600米',
-    workTimeBonus: '满100工时奖励200元',
-    isFlashPay: true,
-    isFavorite: false
-  },
-  {
-    id: 8,
-    title: '仓储搬运工',
-    company: '顺丰速运',
-    logo: '/company-logos/sf-express.svg',
-    salary: '180-220',
-    location: '厦门市海沧区',
-    tags: ['临时工', '体力好', '学历不限'],
-    description: '负责仓库货物搬运、装卸等工作',
-    isUrgent: true,
-    distance: '距地铁站350米',
-    workTimeBonus: '满50工时奖励60元',
-    isFlashPay: true,
-    isFavorite: false
-  },
-  {
-    id: 9,
-    title: '收银员',
-    company: '优衣库',
-    logo: '/company-logos/uniqlo.svg',
-    salary: '150-180',
-    location: '厦门市湖里区',
-    tags: ['兼职', '经验不限', '高中以上'],
-    description: '负责门店收银、整理等工作',
-    isUrgent: false,
-    distance: '距地铁站200米',
-    workTimeBonus: '满30工时奖励40元',
-    isFlashPay: false,
-    isFavorite: false
   }
-])
+]
 
-// 标签样式
-const getTagType = (tag: string) => {
-  const map: Record<string, string> = {
-    '临时工': '',
-    '兼职': 'success',
-    '全职': 'primary',
-    '轻松不累': 'info',
-    '学历不限': 'warning',
-    '1年以下': 'info',
-    '1-3年': 'warning',
-    '高中': 'info',
-    '大专': 'warning'
-  }
-  return map[tag] || ''
-}
-
-// 搜索方法
-const handleSearch = () => {
-  console.log('搜索条件：', searchForm.value)
-  // TODO: 实现搜索逻辑
-}
-
-const resetSearch = () => {
-  searchForm.value = {
-    keyword: '',
-    jobCategory: 'all',
-    location: '',
-    type: '',
-    salary: ''
-  }
-}
-
-// 切换关注状态
-const toggleFavorite = (job: any) => {
-  job.isFavorite = !job.isFavorite
-  ElMessage({
-    message: job.isFavorite ? '已添加到关注' : '已取消关注',
-    type: 'success'
-  })
-}
-
-// 申请岗位
-const handleApply = (job: any) => {
-  ElMessage({
-    message: `已成功申请"${job.title}"岗位`,
-    type: 'success'
-  })
-}
+// 页面加载时获取岗位列表
+onMounted(() => {
+  fetchJobs()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -454,5 +459,10 @@ const handleApply = (job: any) => {
 .tag-item {
   margin-right: 5px;
   margin-bottom: 5px;
+}
+
+.pagination {
+  margin-top: 20px;
+  text-align: center;
 }
 </style> 

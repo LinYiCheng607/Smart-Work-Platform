@@ -1,5 +1,5 @@
 <template>
-  <div class="profile-page">
+  <div class="profile-page" v-loading="loading">
     <!-- 基础信息卡片 -->
     <el-card class="profile-card">
       <div class="profile-header">
@@ -40,7 +40,7 @@
     </el-card>
 
     <!-- 收入管理卡片 -->
-    <el-card class="income-card">
+    <el-card class="income-card" v-loading="incomeLoading">
       <template #header>
         <div class="card-header">
           <h3>收入管理</h3>
@@ -149,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   Plus,
@@ -164,26 +164,32 @@ import {
   Lock
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { getUserProfile, getIncomeInfo, updateProfile, withdrawIncome, setAutoWithdraw } from '@/api/profile'
+import type { UserProfile, IncomeInfo, ProfileForm } from '@/api/profile'
 
 const router = useRouter()
 
+// 加载状态
+const loading = ref(false)
+const incomeLoading = ref(false)
+
 // 用户信息
-const userInfo = ref({
-  id: '10086',
-  name: '张三',
-  avatar: '/avatars/default.png',
-  verified: true,
-  healthCert: true,
-  totalHours: 128,
-  completedJobs: 23,
-  skillCerts: 3,
-  rating: 4.8
+const userInfo = ref<UserProfile>({
+  id: '',
+  name: '',
+  avatar: '',
+  verified: false,
+  healthCert: false,
+  totalHours: 0,
+  completedJobs: 0,
+  skillCerts: 0,
+  rating: 0
 })
 
 // 收入信息
-const income = ref({
-  total: 3280,
-  pending: 580
+const income = ref<IncomeInfo>({
+  total: 0,
+  pending: 0
 })
 
 // 自动领取开关
@@ -194,8 +200,7 @@ const jobEntries = [
   { title: '我的简历', icon: 'Document', path: '/profile/resume' },
   { title: '求职意向', icon: 'User', path: '/profile/intention' },
   { title: '我的关注', icon: 'Star', path: '/profile/favorites' },
-  { title: '报名记录', icon: 'Document', path: '/profile/applications' },
-  { title: '我的评价', icon: 'ChatRound', path: '/profile/reviews' }
+  { title: '报名记录', icon: 'Document', path: '/profile/applications' }
 ]
 
 const activityEntries = [
@@ -212,201 +217,314 @@ const settingEntries = [
 
 // 编辑资料
 const dialogVisible = ref(false)
-const profileForm = ref({
-  avatar: userInfo.value.avatar,
-  name: userInfo.value.name,
-  phone: '138****8888'
+const profileForm = reactive<ProfileForm>({
+  avatar: '',
+  name: '',
+  phone: ''
 })
 
-// 方法
+// 获取用户信息
+const fetchUserProfile = async () => {
+  loading.value = true
+  try {
+    // 尝试从localStorage获取用户名
+    const storedName = localStorage.getItem('user_name')
+    const username = localStorage.getItem('username')
+    const userId = localStorage.getItem('user_id')
+    
+    // 如果后端API尚未实现，使用模拟数据或localStorage中的数据
+    if (import.meta.env.DEV) {
+      // 模拟API延迟
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // 优先使用localStorage中的用户名
+      userInfo.value = {
+        id: userId || '10086',
+        name: storedName || '未登录',
+        avatar: '/avatars/default.png',
+        verified: true,
+        healthCert: true,
+        totalHours: 128,
+        completedJobs: 23,
+        skillCerts: 3,
+        rating: 4.8
+      }
+    } else {
+      try {
+        const res = await getUserProfile()
+        userInfo.value = res.data
+        
+        // 如果API返回的用户名为空，但localStorage中有用户名，则使用localStorage中的用户名
+        if (!userInfo.value.name && storedName) {
+          userInfo.value.name = storedName
+        }
+      } catch (error) {
+        console.error('获取用户信息API失败，使用本地存储:', error)
+        // API调用失败时，使用localStorage中的数据
+        if (storedName) {
+          userInfo.value = {
+            id: userId || '10086',
+            name: storedName,
+            avatar: '/avatars/default.png',
+            verified: true,
+            healthCert: true,
+            totalHours: 128,
+            completedJobs: 23,
+            skillCerts: 3,
+            rating: 4.8
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+    ElMessage.error('获取用户信息失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取收入信息
+const fetchIncomeInfo = async () => {
+  incomeLoading.value = true
+  try {
+    // 如果后端API尚未实现，使用模拟数据
+    if (import.meta.env.DEV) {
+      // 模拟API延迟
+      await new Promise(resolve => setTimeout(resolve, 500))
+      income.value = {
+        total: 3280,
+        pending: 580
+      }
+    } else {
+      const res = await getIncomeInfo()
+      income.value = res.data
+    }
+  } catch (error) {
+    console.error('获取收入信息失败:', error)
+    ElMessage.error('获取收入信息失败，请稍后重试')
+  } finally {
+    incomeLoading.value = false
+  }
+}
+
+// 编辑个人资料
 const handleEditProfile = () => {
+  profileForm.avatar = userInfo.value.avatar
+  profileForm.name = userInfo.value.name
+  profileForm.phone = '138****8888' // 这里应该从用户信息中获取
   dialogVisible.value = true
 }
 
-const handleSaveProfile = () => {
-  userInfo.value.name = profileForm.value.name
-  userInfo.value.avatar = profileForm.value.avatar
-  ElMessage.success('保存成功')
-  dialogVisible.value = false
+// 保存个人资料
+const handleSaveProfile = async () => {
+  try {
+    await updateProfile(profileForm)
+    userInfo.value.name = profileForm.name
+    userInfo.value.avatar = profileForm.avatar
+    ElMessage.success('保存成功')
+    dialogVisible.value = false
+  } catch (error) {
+    console.error('保存失败:', error)
+    ElMessage.error('保存失败，请稍后重试')
+  }
 }
 
+// 头像上传成功
 const handleAvatarSuccess = (res: any) => {
-  profileForm.value.avatar = res.url
+  profileForm.avatar = res.url
 }
 
+// 健康证上传成功
 const handleCertSuccess = () => {
   ElMessage.success('健康证上传成功')
   userInfo.value.healthCert = true
 }
 
-const handleAutoWithdrawChange = (value: boolean) => {
-  ElMessage.success(value ? '已开启自动领取' : '已关闭自动领取')
+// 切换自动领取
+const handleAutoWithdrawChange = async (value: boolean) => {
+  try {
+    await setAutoWithdraw(value)
+    ElMessage.success(value ? '已开启自动领取' : '已关闭自动领取')
+  } catch (error) {
+    console.error('设置失败:', error)
+    ElMessage.error('设置失败，请稍后重试')
+    // 恢复开关状态
+    autoWithdraw.value = !value
+  }
 }
 
-const handleWithdraw = () => {
-  ElMessage.success(`已领取${income.value.pending}元`)
-  income.value.pending = 0
+// 领取收入
+const handleWithdraw = async () => {
+  try {
+    await withdrawIncome()
+    ElMessage.success(`已领取${income.value.pending}元`)
+    income.value.pending = 0
+  } catch (error) {
+    console.error('领取失败:', error)
+    ElMessage.error('领取失败，请稍后重试')
+  }
 }
 
+// 查看收入明细
 const viewIncomeDetails = () => {
   router.push('/profile/income-details')
 }
 
+// 点击快捷入口
 const handleEntryClick = (path: string) => {
   router.push(path)
 }
+
+// 页面加载时获取数据
+onMounted(() => {
+  fetchUserProfile()
+  fetchIncomeInfo()
+})
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .profile-page {
-  padding: 20px;
-}
-
-.profile-card {
-  margin-bottom: 20px;
-}
-
-.profile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.profile-info {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.info-content h2 {
-  margin: 0 0 5px 0;
-}
-
-.user-id {
-  margin: 0 0 10px 0;
-  color: #909399;
-}
-
-.user-tags {
-  display: flex;
-  gap: 10px;
-}
-
-.profile-stats {
-  display: flex;
-  justify-content: space-around;
-  text-align: center;
-  margin-top: 20px;
-}
-
-.stat-item {
-  padding: 0 20px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-  color: #409EFF;
-}
-
-.stat-label {
-  margin-top: 5px;
-  color: #909399;
-}
-
-.income-card {
-  margin-bottom: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-header h3 {
-  margin: 0;
-}
-
-.income-content {
-  padding: 20px 0;
-}
-
-.income-overview {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 20px;
-}
-
-.income-item {
-  text-align: center;
-}
-
-.income-item .label {
-  display: block;
-  color: #909399;
-  margin-bottom: 5px;
-}
-
-.income-item .value {
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.income-item .value.highlight {
-  color: #f56c6c;
-}
-
-.income-actions {
-  text-align: center;
-}
-
-.quick-entries {
-  margin-top: 20px;
-}
-
-.entry-card {
-  height: 100px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.entry-card:hover {
-  transform: translateY(-5px);
-}
-
-.entry-card .el-icon {
-  font-size: 24px;
-  color: #409EFF;
-  margin-bottom: 10px;
-}
-
-.mt-20 {
-  margin-top: 20px;
-}
-
-.avatar-uploader {
-  text-align: center;
-}
-
-.avatar {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-}
-
-.avatar-uploader-icon {
-  font-size: 28px;
-  color: #8c939d;
-  width: 100px;
-  height: 100px;
-  line-height: 100px;
-  text-align: center;
-  border: 1px dashed #d9d9d9;
-  border-radius: 50%;
+  .profile-card {
+    margin-bottom: 20px;
+    
+    .profile-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      
+      .profile-info {
+        display: flex;
+        align-items: center;
+        
+        .info-content {
+          margin-left: 16px;
+          
+          h2 {
+            margin: 0 0 8px;
+          }
+          
+          .user-id {
+            margin: 0 0 8px;
+            color: #666;
+          }
+          
+          .user-tags {
+            .el-tag {
+              margin-right: 8px;
+            }
+          }
+        }
+      }
+    }
+    
+    .profile-stats {
+      display: flex;
+      justify-content: space-around;
+      text-align: center;
+      
+      .stat-item {
+        padding: 0 16px;
+        
+        .stat-value {
+          font-size: 24px;
+          font-weight: bold;
+          color: #409eff;
+          margin-bottom: 8px;
+        }
+        
+        .stat-label {
+          color: #666;
+        }
+      }
+    }
+  }
+  
+  .income-card {
+    margin-bottom: 20px;
+    
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      
+      h3 {
+        margin: 0;
+      }
+    }
+    
+    .income-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      
+      .income-overview {
+        .income-item {
+          margin-bottom: 12px;
+          
+          .label {
+            color: #666;
+            margin-right: 16px;
+          }
+          
+          .value {
+            font-weight: bold;
+            font-size: 18px;
+            
+            &.highlight {
+              color: #f56c6c;
+            }
+          }
+        }
+      }
+      
+      .income-actions {
+        display: flex;
+        gap: 12px;
+      }
+    }
+  }
+  
+  .quick-entries {
+    .entry-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      cursor: pointer;
+      
+      .el-icon {
+        font-size: 24px;
+        margin-bottom: 8px;
+      }
+    }
+    
+    .mt-20 {
+      margin-top: 20px;
+    }
+  }
+  
+  .avatar-uploader {
+    display: flex;
+    justify-content: center;
+    
+    .avatar {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+    }
+    
+    .avatar-uploader-icon {
+      font-size: 28px;
+      color: #8c939d;
+      width: 100px;
+      height: 100px;
+      line-height: 100px;
+      text-align: center;
+      border: 1px dashed #d9d9d9;
+      border-radius: 50%;
+    }
+  }
 }
 </style> 

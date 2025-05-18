@@ -99,13 +99,16 @@ const handleLogin = async () => {
           if (data.user.avatar) {
             userStore.updateAvatar(data.user.avatar)
           }
-          // 将用户名存储到localStorage中，以便在刷新页面后仍能显示
+          // 将用户信息存储到localStorage中，以便在刷新页面后仍能显示
           localStorage.setItem('user_name', data.user.name)
           localStorage.setItem('username', data.user.username)
+          localStorage.setItem('user_id', String(data.user.id))
         } else {
           // 如果登录响应中没有用户信息，则使用登录的用户名作为显示名
+          // 生成一个临时ID (数字类型)
+          const tempId = Date.now()
           const userInfo = {
-            id: 0,
+            id: tempId,
             username: loginForm.username,
             name: loginForm.username,
             phone: '',
@@ -117,6 +120,7 @@ const handleLogin = async () => {
           userStore.setUserInfo(userInfo)
           localStorage.setItem('user_name', loginForm.username)
           localStorage.setItem('username', loginForm.username)
+          localStorage.setItem('user_id', String(tempId))
         }
         
         ElMessage.success('登录成功')

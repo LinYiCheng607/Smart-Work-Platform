@@ -56,12 +56,14 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import { login } from '@/api/auth'
+import { login, getUserInfo } from '@/api/auth'
 import type { LoginForm, LoginResponse } from '@/types/auth'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const loading = ref(false)
 const loginFormRef = ref<FormInstance>()
+const userStore = useUserStore()
 
 const loginForm = reactive<LoginForm>({
   username: '',
@@ -90,6 +92,33 @@ const handleLogin = async () => {
         const data = response as unknown as LoginResponse
         localStorage.setItem('access_token', data.access)
         localStorage.setItem('refresh_token', data.refresh)
+        
+        // 直接从登录响应中获取用户信息
+        if (data.user) {
+          userStore.setUserInfo(data.user)
+          if (data.user.avatar) {
+            userStore.updateAvatar(data.user.avatar)
+          }
+          // 将用户名存储到localStorage中，以便在刷新页面后仍能显示
+          localStorage.setItem('user_name', data.user.name)
+          localStorage.setItem('username', data.user.username)
+        } else {
+          // 如果登录响应中没有用户信息，则使用登录的用户名作为显示名
+          const userInfo = {
+            id: 0,
+            username: loginForm.username,
+            name: loginForm.username,
+            phone: '',
+            avatar: null,
+            role: 0,
+            id_card: '',
+            skill_tags: ''
+          }
+          userStore.setUserInfo(userInfo)
+          localStorage.setItem('user_name', loginForm.username)
+          localStorage.setItem('username', loginForm.username)
+        }
+        
         ElMessage.success('登录成功')
         router.push('/')
       } catch (error: any) {

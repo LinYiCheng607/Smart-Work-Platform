@@ -48,8 +48,8 @@
         <div class="right">
           <el-dropdown>
             <span class="user-info">
-              <el-avatar :size="32" src="https://placeholder.com/32" />
-              <span>张三</span>
+              <el-avatar :size="32" :src="userStore.avatar || 'https://placeholder.com/32'" />
+              <span>{{ displayName }}</span>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Monitor,
@@ -84,10 +84,27 @@ import {
   User
 } from '@element-plus/icons-vue'
 import axios from 'axios'
+import { useUserStore } from '@/stores/user'
+import { getUserInfo } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
 const unreadCount = ref(0)
+const userStore = useUserStore()
+
+// 计算显示名称，优先使用store中的用户信息，其次使用localStorage中的用户名
+const displayName = computed(() => {
+  if (userStore.userInfo?.name) {
+    return userStore.userInfo.name
+  }
+  
+  const storedName = localStorage.getItem('user_name')
+  if (storedName) {
+    return storedName
+  }
+  
+  return '未登录'
+})
 
 // 获取未读消息数
 const fetchUnreadCount = async () => {
@@ -100,12 +117,39 @@ const fetchUnreadCount = async () => {
   }
 }
 
+// 初始化用户信息
+const initUserInfo = () => {
+  const token = localStorage.getItem('access_token')
+  const userName = localStorage.getItem('user_name')
+  const username = localStorage.getItem('username')
+  
+  if (token && userName && !userStore.userInfo) {
+    // 如果有token和用户名但没有用户信息，则创建基本用户信息
+    userStore.setUserInfo({
+      id: 0,
+      username: username || userName,
+      name: userName,
+      phone: '',
+      avatar: null,
+      role: 0,
+      id_card: '',
+      skill_tags: ''
+    })
+  }
+}
+
 onMounted(() => {
   fetchUnreadCount()
+  initUserInfo()
 })
 
 const handleLogout = () => {
-  // TODO: 实现退出登录逻辑
+  // 清除用户信息和token
+  userStore.clearUserInfo()
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user_name')
+  localStorage.removeItem('username')
   router.push('/login')
 }
 </script>

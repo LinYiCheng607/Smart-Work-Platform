@@ -6,6 +6,16 @@ export interface LoginForm {
 export interface LoginResponse {
   access: string
   refresh: string
+  user?: {
+    id: number
+    username: string
+    name: string
+    phone: string
+    avatar: string | null
+    role: number
+    id_card: string
+    skill_tags: string
+  }
 }
 
 export interface UserInfo {

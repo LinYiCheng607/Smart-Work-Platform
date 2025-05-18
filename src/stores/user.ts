@@ -1,13 +1,10 @@
 import { defineStore } from 'pinia'
+import type { UserInfo } from '@/types/auth'
 
 interface UserState {
   avatar: string
   token: string
-  userInfo: {
-    id: string
-    name: string
-    phone: string
-  } | null
+  userInfo: UserInfo | null
 }
 
 export const useUserStore = defineStore('user', {
@@ -26,7 +23,7 @@ export const useUserStore = defineStore('user', {
       this.token = token
     },
     
-    setUserInfo(info: UserState['userInfo']) {
+    setUserInfo(info: UserInfo) {
       this.userInfo = info
     },
     

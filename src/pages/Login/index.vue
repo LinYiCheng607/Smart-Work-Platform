@@ -59,6 +59,7 @@ import type { FormInstance } from 'element-plus'
 import { login, getUserInfo } from '@/api/auth'
 import type { LoginForm, LoginResponse } from '@/types/auth'
 import { useUserStore } from '@/stores/user'
+import { USER_ROLES } from '@/constants/user'
 
 const router = useRouter()
 const loading = ref(false)
@@ -88,6 +89,50 @@ const handleLogin = async () => {
     if (valid) {
       try {
         loading.value = true
+        
+        // 在开发环境中，检查是否有注册信息
+        if (import.meta.env.DEV) {
+          // 获取已注册用户列表
+          const registeredUsersStr = localStorage.getItem('registered_users');
+          if (registeredUsersStr) {
+            const registeredUsers = JSON.parse(registeredUsersStr);
+            
+            // 查找匹配的用户
+            const matchedUser = registeredUsers.find((user: any) => 
+              user.username === loginForm.username && user.password === loginForm.password
+            );
+            
+            if (matchedUser) {
+              console.log('找到匹配的注册用户:', matchedUser);
+              console.log('用户角色:', matchedUser.role);
+              
+              // 存储用户信息
+              localStorage.setItem('user_name', matchedUser.name);
+              localStorage.setItem('username', matchedUser.username);
+              localStorage.setItem('user_id', String(Date.now()));
+              localStorage.setItem('user_role', String(matchedUser.role));
+              localStorage.setItem('access_token', 'mock_token_for_registered_user');
+              localStorage.setItem('refresh_token', 'mock_refresh_token');
+              
+              // 更新用户信息
+              userStore.setUserInfo({
+                id: Date.now(),
+                username: matchedUser.username,
+                name: matchedUser.name,
+                phone: matchedUser.phone || '',
+                avatar: null,
+                role: Number(matchedUser.role),
+                id_card: matchedUser.id_card || '',
+                skill_tags: ''
+              });
+              
+              ElMessage.success('登录成功');
+              router.push('/');
+              return;
+            }
+          }
+        }
+        
         const response = await login(loginForm)
         const data = response as unknown as LoginResponse
         localStorage.setItem('access_token', data.access)
@@ -95,14 +140,34 @@ const handleLogin = async () => {
         
         // 直接从登录响应中获取用户信息
         if (data.user) {
-          userStore.setUserInfo(data.user)
-          if (data.user.avatar) {
-            userStore.updateAvatar(data.user.avatar)
+          console.log('API返回的用户信息:', data.user)
+          console.log('用户角色:', data.user.role)
+          
+          // 确保角色值是数字类型
+          let roleValue = Number(data.user.role);
+          if (isNaN(roleValue)) {
+            console.error('角色值转换失败:', data.user.role);
+            roleValue = USER_ROLES.WORKER;
           }
+          
+          // 创建一个新的用户对象，确保角色值是数字
+          const userInfo = {
+            ...data.user,
+            role: roleValue
+          };
+          
+          userStore.setUserInfo(userInfo);
+          if (data.user.avatar) {
+            userStore.updateAvatar(data.user.avatar);
+          }
+          
           // 将用户信息存储到localStorage中，以便在刷新页面后仍能显示
-          localStorage.setItem('user_name', data.user.name)
-          localStorage.setItem('username', data.user.username)
-          localStorage.setItem('user_id', String(data.user.id))
+          localStorage.setItem('user_name', data.user.name);
+          localStorage.setItem('username', data.user.username);
+          localStorage.setItem('user_id', String(data.user.id));
+          localStorage.setItem('user_role', String(roleValue));
+          
+          console.log('存储到localStorage的角色值:', roleValue);
         } else {
           // 如果登录响应中没有用户信息，则使用登录的用户名作为显示名
           // 生成一个临时ID (数字类型)
@@ -113,7 +178,7 @@ const handleLogin = async () => {
             name: loginForm.username,
             phone: '',
             avatar: null,
-            role: 0,
+            role: USER_ROLES.WORKER, // 默认为求职者角色
             id_card: '',
             skill_tags: ''
           }
@@ -121,6 +186,7 @@ const handleLogin = async () => {
           localStorage.setItem('user_name', loginForm.username)
           localStorage.setItem('username', loginForm.username)
           localStorage.setItem('user_id', String(tempId))
+          localStorage.setItem('user_role', String(USER_ROLES.WORKER))
         }
         
         ElMessage.success('登录成功')

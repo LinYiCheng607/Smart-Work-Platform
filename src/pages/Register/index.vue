@@ -53,9 +53,8 @@
         
         <el-form-item label="用户类型" prop="role">
           <el-select v-model="registerForm.role" placeholder="请选择用户类型">
-            <el-option label="普通用户" :value="0" />
-            <el-option label="零工人员" :value="1" />
-            <el-option label="企业管理员" :value="2" />
+            <el-option label="零工求职者" :value="0" />
+            <el-option label="雇主" :value="1" />
           </el-select>
         </el-form-item>
         
@@ -85,6 +84,7 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import { register } from '@/api/auth'
 import type { RegisterForm } from '@/types/auth'
+import { USER_ROLES } from '@/constants/user'
 
 const router = useRouter()
 const loading = ref(false)
@@ -96,7 +96,7 @@ const registerForm = reactive<RegisterForm>({
   name: '',
   phone: '',
   id_card: '',
-  role: 0
+  role: USER_ROLES.WORKER
 })
 
 const validatePhone = (rule: any, value: string, callback: any) => {
@@ -151,15 +151,45 @@ const handleRegister = async () => {
     if (valid) {
       try {
         loading.value = true
+        console.log('注册表单数据:', registerForm)
+        console.log('选择的角色值:', registerForm.role)
+        console.log('雇主角色常量:', USER_ROLES.EMPLOYER)
+        
+        let roleValue = Number(registerForm.role);
+        if (isNaN(roleValue)) {
+          console.error('角色值转换失败:', registerForm.role);
+          roleValue = USER_ROLES.WORKER;
+        }
+        
         const registerData = {
           username: registerForm.username,
           password: registerForm.password,
           name: registerForm.name,
           phone: registerForm.phone,
           id_card: registerForm.id_card,
-          role: Number(registerForm.role)
+          role: roleValue
         }
+        
+        console.log('提交的注册数据:', registerData)
+        
         await register(registerData)
+        
+        // 在开发环境中，手动将注册信息存储到localStorage中
+        if (import.meta.env.DEV) {
+          // 生成一个临时ID
+          const tempId = Date.now();
+          
+          // 存储用户信息，以便在登录时使用
+          localStorage.setItem('last_registered_user', JSON.stringify({
+            id: tempId,
+            username: registerData.username,
+            name: registerData.name,
+            role: registerData.role
+          }));
+          
+          console.log('已将注册信息存储到localStorage中');
+        }
+        
         ElMessage.success('注册成功')
         router.push('/login')
       } catch (error: any) {

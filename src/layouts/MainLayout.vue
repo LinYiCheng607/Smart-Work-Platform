@@ -18,6 +18,10 @@
           <el-icon><Briefcase /></el-icon>
           <span>岗位列表</span>
         </el-menu-item>
+        <el-menu-item index="/jobs/publish">
+          <el-icon><Plus /></el-icon>
+          <span>发布岗位</span>
+        </el-menu-item>
         <el-menu-item index="/schedule">
           <el-icon><Calendar /></el-icon>
           <span>日程管理</span>
@@ -81,11 +85,14 @@ import {
   Calendar,
   ChatDotRound,
   Bell,
-  User
+  User,
+  Plus
 } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 import { getUserInfo } from '@/api/auth'
+import { USER_ROLES } from '@/constants/user'
+import type { UserInfo } from '@/types/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,30 +125,85 @@ const fetchUnreadCount = async () => {
 }
 
 // 初始化用户信息
-const initUserInfo = () => {
-  const token = localStorage.getItem('access_token')
-  const userName = localStorage.getItem('user_name')
-  const username = localStorage.getItem('username')
-  const userId = localStorage.getItem('user_id')
+const initUserInfo = async () => {
+  const token = localStorage.getItem('access_token');
+  const userName = localStorage.getItem('user_name');
+  const username = localStorage.getItem('username');
+  const userId = localStorage.getItem('user_id');
+  const userRole = localStorage.getItem('user_role');
   
-  if (token && userName && !userStore.userInfo) {
-    // 如果有token和用户名但没有用户信息，则创建基本用户信息
-    userStore.setUserInfo({
-      id: userId ? parseInt(userId) : 0,
-      username: username || userName,
-      name: userName,
-      phone: '',
-      avatar: null,
-      role: 0,
-      id_card: '',
-      skill_tags: ''
-    })
+  console.log('从localStorage读取的角色:', userRole);
+  
+  if (token) {
+    try {
+      // 尝试从后端获取最新的用户信息
+      console.log('MainLayout - 正在从后端获取用户信息...');
+      const response = await getUserInfo();
+      const userInfo = response as unknown as UserInfo;
+      console.log('MainLayout - 从后端获取的用户信息:', userInfo);
+      
+      if (userInfo) {
+        // 确保角色值是数字类型
+        const role = Number(userInfo.role);
+        
+        // 更新用户信息
+        userStore.setUserInfo({
+          ...userInfo,
+          role: role
+        });
+        
+        // 更新localStorage
+        localStorage.setItem('user_name', userInfo.name);
+        localStorage.setItem('username', userInfo.username);
+        localStorage.setItem('user_id', String(userInfo.id));
+        localStorage.setItem('user_role', String(role));
+        
+        console.log('MainLayout - 更新后的用户信息:', userStore.userInfo);
+        return;
+      }
+    } catch (error) {
+      console.error('从后端获取用户信息失败，将使用localStorage中的信息:', error);
+    }
+    
+    // 如果从后端获取失败，则使用localStorage中的信息
+    if (userName && !userStore.userInfo) {
+      // 确保角色值是数字类型
+      let role = USER_ROLES.WORKER; // 默认为求职者角色
+      
+      if (userRole) {
+        // 尝试转换为数字
+        role = Number(userRole);
+        
+        // 检查转换是否成功
+        if (isNaN(role)) {
+          console.error('角色值转换失败:', userRole);
+          role = USER_ROLES.WORKER;
+        }
+      }
+      
+      console.log('设置的用户角色:', role);
+      console.log('雇主角色常量:', USER_ROLES.EMPLOYER);
+      console.log('是否匹配:', role === USER_ROLES.EMPLOYER);
+      
+      userStore.setUserInfo({
+        id: userId ? parseInt(userId) : 0,
+        username: username || userName,
+        name: userName,
+        phone: '',
+        avatar: null,
+        role: role,
+        id_card: '',
+        skill_tags: ''
+      });
+      
+      console.log('设置后的用户信息:', userStore.userInfo);
+    }
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   fetchUnreadCount()
-  initUserInfo()
+  await initUserInfo()
 })
 
 const handleLogout = () => {
@@ -152,6 +214,7 @@ const handleLogout = () => {
   localStorage.removeItem('user_name')
   localStorage.removeItem('username')
   localStorage.removeItem('user_id')
+  localStorage.removeItem('user_role')
   router.push('/login')
 }
 </script>

@@ -20,12 +20,19 @@
 
       <!-- 分类筛选标签 -->
       <div class="filter-tags">
-        <el-radio-group v-model="searchForm.jobCategory" @change="handleSearch">
-          <el-radio-button label="all">全部</el-radio-button>
-          <el-radio-button label="standard">标准岗位</el-radio-button>
-          <el-radio-button label="urgent">抢班岗位</el-radio-button>
-          <el-radio-button label="favorite">我的关注</el-radio-button>
-        </el-radio-group>
+        <div class="filter-tags-left">
+          <el-radio-group v-model="searchForm.jobCategory" @change="handleSearch">
+            <el-radio-button label="all">全部</el-radio-button>
+            <el-radio-button label="standard">标准岗位</el-radio-button>
+            <el-radio-button label="urgent">抢班岗位</el-radio-button>
+            <el-radio-button label="favorite">我的关注</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="filter-tags-right">
+          <el-button type="success" @click="goToPublish">
+            <el-icon><Plus /></el-icon>发布岗位
+          </el-button>
+        </div>
       </div>
 
       <el-form :inline="true" :model="searchForm">
@@ -186,10 +193,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { Location, Search, Star, StarFilled, Money } from '@element-plus/icons-vue'
+import { Location, Search, Star, StarFilled, Money, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElLoading } from 'element-plus'
 import { getJobList, favoriteJob, unfavoriteJob, applyJob } from '@/api/jobs'
 import type { Job, JobQueryParams } from '@/api/jobs'
+import { useUserStore } from '@/stores/user'
+import { useRouter } from 'vue-router'
+import { USER_ROLES } from '@/constants/user'
+import { getUserInfo } from '@/api/auth'
+import type { UserInfo } from '@/types/auth'
 
 // 搜索表单
 const searchForm = reactive<JobQueryParams>({
@@ -216,8 +228,15 @@ const fetchJobs = async () => {
       // 模拟API延迟
       await new Promise(resolve => setTimeout(resolve, 500))
       
+      // 获取本地存储中的岗位数据
+      const localJobsStr = localStorage.getItem('published_jobs')
+      const localJobs = localJobsStr ? JSON.parse(localJobsStr) : []
+      
+      // 合并模拟数据和本地存储的岗位数据
+      let allJobs = [...mockJobList, ...localJobs]
+      
       // 应用筛选条件
-      let filteredJobs = [...mockJobList]
+      let filteredJobs = [...allJobs]
       
       // 关键词搜索
       if (searchForm.keyword) {
@@ -632,9 +651,33 @@ const mockJobList = [
   }
 ]
 
-// 页面加载时获取岗位列表
+// 从后端获取最新的用户信息
+const fetchUserInfo = async () => {
+  try {
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      return
+    }
+    
+    console.log('岗位列表页 - 正在从后端获取用户信息...')
+    const response = await getUserInfo()
+    const userInfo = response as unknown as UserInfo
+    console.log('岗位列表页 - 从后端获取的用户信息:', userInfo)
+    
+    if (userInfo) {
+      // 更新用户信息
+      userStore.setUserInfo(userInfo)
+      console.log('岗位列表页 - 更新后的用户信息:', userStore.userInfo)
+    }
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+  }
+}
+
+// 页面加载时获取岗位列表和最新的用户信息
 onMounted(() => {
   fetchJobs()
+  fetchUserInfo()
 })
 
 // 计算是否有激活的筛选条件
@@ -658,6 +701,36 @@ const clearFilter = (filterName: string) => {
   }
   fetchJobs()
 }
+
+// 用户商店
+const userStore = useUserStore()
+const router = useRouter()
+
+// 跳转到发布岗位页面
+const goToPublish = () => {
+  // 检查用户角色
+  const userRole = userStore.userInfo?.role;
+  console.log('当前用户信息:', userStore.userInfo);
+  console.log('当前用户角色:', userRole, typeof userRole);
+  console.log('雇主角色常量:', USER_ROLES.EMPLOYER, typeof USER_ROLES.EMPLOYER);
+  
+  // 直接检查角色值是否为1（雇主）
+  const roleValue = Number(userRole);
+  console.log('转换后的角色值:', roleValue, typeof roleValue);
+  
+  // 尝试多种比较方式
+  const isMatch1 = roleValue === USER_ROLES.EMPLOYER;
+  const isMatch2 = roleValue === 1;
+  
+  console.log('比较结果1 (roleValue === USER_ROLES.EMPLOYER):', isMatch1);
+  console.log('比较结果2 (roleValue === 1):', isMatch2);
+  
+  if (roleValue === 1) {
+    router.push('/jobs/publish');
+  } else {
+    ElMessage.warning('您当前是求职者身份，没有权限发布岗位');
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -675,6 +748,17 @@ const clearFilter = (filterName: string) => {
 
     .filter-tags {
       margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      
+      .filter-tags-left {
+        flex: 1;
+      }
+      
+      .filter-tags-right {
+        margin-left: 10px;
+      }
     }
   }
 

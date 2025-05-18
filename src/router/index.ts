@@ -31,6 +31,15 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '岗位列表', requiresAuth: true }
       },
       {
+        path: 'jobs/publish',
+        name: 'JobPublish',
+        component: () => import('@/pages/Jobs/Publish.vue'),
+        meta: { 
+          title: '发布岗位', 
+          requiresAuth: true
+        }
+      },
+      {
         path: 'schedule',
         name: 'Schedule',
         component: () => import('@/pages/Schedule/index.vue'),

@@ -7,8 +7,8 @@ export interface JobQueryParams {
   location?: string
   type?: string
   salary?: string
-  page?: number
-  pageSize?: number
+  page: number
+  pageSize: number
 }
 
 // 岗位接口
@@ -26,6 +26,8 @@ export interface Job {
   workTimeBonus: string
   isFlashPay: boolean
   isFavorite?: boolean
+  type: string
+  workLocation: string
 }
 
 // 获取岗位列表
